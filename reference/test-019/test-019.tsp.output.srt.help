@@ -33,6 +33,9 @@ Options:
       can be used as a workaround for this connection problem with earlier
       versions).
 
+  --display-url
+      Display resulting srt:// URL as information.
+
   -e
   --enforce-burst
       Enforce that the number of TS packets per UDP packet is exactly what is
