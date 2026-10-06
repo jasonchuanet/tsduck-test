@@ -33,8 +33,11 @@ Options:
       can be used as a workaround for this connection problem with earlier
       versions).
 
-  --display-url
-      Display resulting srt:// URL as information.
+  --display-url[=value]
+      Display resulting srt:// URL as information. If specified without value,
+      display standard srt:// URL parameters only. If specified as 'all',
+      display all URL parameters, including non-standard ones.
+      The 'value' must be one of "all", "standard".
 
   -e
   --enforce-burst

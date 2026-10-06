@@ -39,8 +39,11 @@ Options:
       real-time input bitrate. The default is to never display the bitrate.
       This option is ignored if --evaluation-interval is not specified.
 
-  --display-url
-      Display resulting srt:// URL as information.
+  --display-url[=value]
+      Display resulting srt:// URL as information. If specified without value,
+      display standard srt:// URL parameters only. If specified as 'all',
+      display all URL parameters, including non-standard ones.
+      The 'value' must be one of "all", "standard".
 
   --enforce-encryption
       This option enforces that both connection parties have the same
