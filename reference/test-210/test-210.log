@@ -1,0 +1,11 @@
+PASS raw-udp-without-fec: 1988 TS packets, dropped 0 RTP datagrams
+PASS rtp-without-fec: 1988 TS packets, dropped 0 RTP datagrams
+PASS column-burst: 1988 TS packets, dropped 4 RTP datagrams
+PASS iterative-2d: 1988 TS packets, dropped 3 RTP datagrams
+PASS unrecoverable-rectangle: 1960 TS packets, dropped 4 RTP datagrams
+PASS lost-column-parity: 1981 TS packets, dropped 1 RTP datagrams
+PASS malformed-column-parity: 1981 TS packets, dropped 1 RTP datagrams
+PASS sequence-window: 1988 TS packets, dropped 0 RTP datagrams
+PASS source-filter-2d: 1988 TS packets, dropped 3 RTP datagrams
+PASS multicast-2d: 1988 TS packets, dropped 3 RTP datagrams
+PASS idle-timeout: media and parity workers stopped
