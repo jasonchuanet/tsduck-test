@@ -9,3 +9,4 @@ PASS sequence-window: 1988 TS packets, dropped 0 RTP datagrams
 PASS source-filter-2d: 1988 TS packets, dropped 3 RTP datagrams
 PASS multicast-2d: 1988 TS packets, dropped 3 RTP datagrams
 PASS idle-timeout: media and parity workers stopped
+PASS input-options: receive flag and dependent controls validated

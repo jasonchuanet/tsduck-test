@@ -43,22 +43,6 @@ Options:
       By default, the real-time input bitrate is never evaluated and the input
       bitrate is evaluated from the PCR in the input packets.
 
-  --fec[=1|2]
-      Enable SMPTE ST 2022-1 FEC recovery for ST 2022-2 MPEG-TS over RTP. Use 1
-      for column FEC (media port +2), or 2 for column and row FEC (media ports
-      +2 and +4). The default with no value is 2. All streams use the same
-      destination address and local interface. FEC is disabled by default.
-
-  --fec-buffer-size datagrams
-      Bound the FEC media sequence window, parity buffer and receive queue. The
-      default is 4096 RTP datagrams. Increase it for high bitrates or long
-      latency. When the sequence window fills, older media are released early.
-
-  --fec-latency milliseconds
-      Specify the FEC playout latency in milliseconds. The default is 1000.
-      Allow time for the sender's FEC matrix and network jitter. Unrecoverable
-      losses are skipped when this delay expires.
-
   -f
   --first-source
       Filter UDP packets based on the source address. Use the sender address of
@@ -100,6 +84,23 @@ Options:
       Specify that all packets are in 204-byte format. By default, the input
       packet size, 188 or 204 bytes, is automatically detected. Use this option
       only when necessary.
+
+  --smpte-2022-fec
+      Enable SMPTE ST 2022-1 FEC recovery for ST 2022-2 MPEG-TS over RTP.
+      Receive column FEC on media port +2 and optional row FEC on media port
+      +4. Both 1D/2D and block/non-block arrangements are detected from the
+      headers. All streams use the same destination address and local
+      interface. FEC is disabled by default.
+
+  --smpte-2022-fec-buffer-size datagrams
+      Bound the FEC media sequence window, parity buffer and receive queue. The
+      default is 4096 RTP datagrams. Increase it for high bitrates or long
+      latency. When the sequence window fills, older media are released early.
+
+  --smpte-2022-fec-latency milliseconds
+      Specify the FEC playout latency in milliseconds. The default is 1000.
+      Allow time for the sender's FEC matrix and network jitter. Unrecoverable
+      losses are skipped when this delay expires.
 
   -s ip-address[:port]
   --source ip-address[:port]

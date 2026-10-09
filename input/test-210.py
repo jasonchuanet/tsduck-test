@@ -223,8 +223,8 @@ def make_command(tsp, destination, path, packets, fec, multicast, latency, buffe
         # Specify loopback on both endpoints instead of relying on the default route.
         command += ["--local-address", "127.0.0.1"]
     if fec:
-        # Explicit modes exercise both the column-only and iterative row/column paths.
-        command += [f"--fec={fec}", "--fec-latency", str(latency), "--fec-buffer-size", str(buffer_size)]
+        # One flag discovers both column-only and row/column senders, like dektec input.
+        command += ["--smpte-2022-fec", "--smpte-2022-fec-latency", str(latency), "--smpte-2022-fec-buffer-size", str(buffer_size)]
     if source_port is not None:
         # Parity comes from other ports; filtering it by this port would break recovery.
         command += ["--source", f"127.0.0.1:{source_port}"]
@@ -359,7 +359,7 @@ def idle_timeout(tsp):
     port, reservations = listeners()
     for sock in reservations:
         sock.close()
-    command = [tsp, "-I", "ip", str(port), "--fec", "--receive-timeout", "1000", "-O", "drop"]
+    command = [tsp, "-I", "ip", str(port), "--smpte-2022-fec", "--receive-timeout", "1000", "-O", "drop"]
     # No media or parity arrives: only media inactivity should stop the input.
     # Reaping the process proves that idle parity receivers do not prevent shutdown.
     # The elapsed-time lower bound distinguishes timeout from an immediate setup failure.
@@ -385,6 +385,25 @@ def idle_timeout(tsp):
     print("PASS idle-timeout: media and parity workers stopped")
 
 
+def input_options(tsp):
+    """Verify the dektec-compatible receive flag and its dependent controls."""
+    # Input needs no requested dimension: every equation already describes its members.
+    # An output-style value must fail during parsing instead of becoming a port parameter.
+    cases = [(["--smpte-2022-fec=2d"], "no value allowed"),
+             (["--smpte-2022-fec-latency", "1000"], "require --smpte-2022-fec"),
+             (["--smpte-2022-fec-buffer-size", "4096"], "require --smpte-2022-fec"),
+             (["--fec=2"], "unknown option")]
+    for options, message in cases:
+        # Bound an accidentally accepted configuration with media inactivity timeout.
+        # Matching the validation message excludes unrelated socket or timeout failures.
+        result = subprocess.run([tsp, "-I", "ip", "5000", "--receive-timeout", "100", *options, "-O", "drop"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5)
+        if result.returncode == 0 or message not in result.stderr.decode(errors="replace"):
+            raise RuntimeError(f"Incorrect input FEC option validation: {options}")
+    # The normal recovery cases separately prove the flag works for both wire dimensions.
+    print("PASS input-options: receive flag and dependent controls validated")
+
+
 def main():
     parser = argparse.ArgumentParser(description="SMPTE 2022-1 IP input regression test")
     parser.add_argument("--tsp", default="tsp", help="Path to the tsp executable under test")
@@ -407,7 +426,7 @@ def main():
     records = load_fixture(args.fixture)
     media, base = matrix(records)
     # Each case owns its output file and all sockets; independent jobs cannot collide.
-    # The same fixture tests the direct path and both optional FEC modes.
+    # The same receiver flag handles either wire dimension; replay selects the parity streams.
     # Burst and iterative patterns use complete independently captured parity groups.
     with tempfile.TemporaryDirectory(prefix="tsduck-ip-fec-") as directory:
         path = Path(directory)
@@ -422,6 +441,7 @@ def main():
         replay(args.tsp, records, media, base, "source-filter-2d", 2, (1, 5, 6), True, path, source_filter=True)
         replay(args.tsp, records, media, base, "multicast-2d", 2, (1, 5, 6), True, path, multicast=True)
     idle_timeout(args.tsp)
+    input_options(args.tsp)
 
 
 if __name__ == "__main__":

@@ -18,9 +18,11 @@ The normal test does not require FFmpeg:
 tests/test-210.sh --bin /path/to/tsduck/bin/release-directory
 ```
 
-It checks raw UDP and RTP input, 1D burst recovery, iterative 2D recovery,
+The `--smpte-2022-fec` input flag automatically handles both wire dimensions.
+The test checks raw UDP and RTP input, 1D burst recovery, iterative 2D recovery,
 uncorrectable loss, lost and malformed parity, buffer pressure, explicit media
-source filtering, multicast, and receive timeout with idle parity sockets.
+source filtering, multicast, receive timeout with idle parity sockets,
+and flag/dependent-option validation.
 Each output transport stream is compared byte for byte with the captured media
 payloads, excluding only the intentionally unrecoverable losses.
 

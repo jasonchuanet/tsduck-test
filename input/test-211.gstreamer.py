@@ -50,13 +50,13 @@ def pipeline(gst_launch, port, output, mode):
                "udpsrc", "address=127.0.0.1", "port=" + str(port + 2), "caps=" + parity_caps, "!", "fec.fec_0"]
     # In 1D mode there is no row receiver pad and no row stream to conceal a column error.
     # The second request pad is wired only for the two-stream case.
-    if mode == "2":
+    if mode.startswith("2d"):
         command += ["udpsrc", "address=127.0.0.1", "port=" + str(port + 4),
                     "caps=" + parity_caps, "!", "fec.fec_1"]
     return command
 
 
-def schedule(records, media):
+def schedule(records, media, mode):
     """Reconstruct the specified emission schedule without altering captured parity."""
     # UDP queues do not preserve global cross-port arrival order in the capture utility.
     # SNBase and the independently known geometry identify each equation's emission point.
@@ -65,10 +65,11 @@ def schedule(records, media):
     for role, data, _ in records:
         if role:
             base = positions[struct.unpack_from("!H", data, 12)[0]]
-            # A row follows its last protected member; a column follows c*D in the next matrix.
-            # This is the aligned Annex C schedule, independently calculated from wire SNBase.
-            when = base + COLUMNS - 1 if role == 2 else \
-                (base // (COLUMNS * ROWS) + 1) * COLUMNS * ROWS + (base % COLUMNS) * ROWS
+            # Both arrangements are independently scheduled from captured SNBase.
+            # Staggered columns follow their last member by L; aligned columns use the next-block interleaver.
+            when = base + COLUMNS - 1 if role == 2 else base + COLUMNS * ROWS
+            if role == 1 and mode.endswith("-b"):
+                when = (base // (COLUMNS * ROWS) + 1) * COLUMNS * ROWS + (base % COLUMNS) * ROWS
             events.setdefault(when, []).append((role, data))
     return events
 
@@ -109,7 +110,7 @@ def check_receiver(gst_launch, records, media, source, directory, mode, losses):
         reservation.close()
     output = directory / ("recovered-" + mode + ".ts")
     log = directory / ("receiver-" + mode + ".log")
-    events = schedule(records, media)
+    events = schedule(records, media, mode)
     # A regular file drains arbitrary diagnostics without a pipe filling and stalling replay.
     # Guard the child before any further operation that can fail.
     with log.open("w") as error:
@@ -129,10 +130,10 @@ def check_receiver(gst_launch, records, media, source, directory, mode, losses):
     # Require successful termination and exact equality with all originally transmitted TS.
     actual = output.read_bytes() if output.exists() else b""
     if process.returncode != 0 or actual != source:
-        raise RuntimeError(f"GStreamer {mode}D recovery failed: {len(actual)} of {len(source)} bytes\n{log.read_text()}")
+        raise RuntimeError(f"GStreamer {mode} recovery failed: {len(actual)} of {len(source)} bytes\n{log.read_text()}")
     # Report only after complete byte comparison, including packets after the loss window.
     # Temporary paths and ephemeral ports do not enter the reproducible summary.
-    print(f"PASS GStreamer independent receiver {mode}D: recovered {len(losses)} lost RTP datagrams, "
+    print(f"PASS GStreamer independent receiver {mode}: recovered {len(losses)} lost RTP datagrams, "
           f"{len(actual) // 188} exact TS packets")
 
 
@@ -150,7 +151,8 @@ def main():
     # All source, receiver logs and decoded artifacts are temporary, not repository fixtures.
     with tempfile.TemporaryDirectory(prefix="tsduck-gstreamer-fec-") as name:
         directory = Path(name)
-        for mode, losses in (("1", {16, 17, 18, 19}), ("2", {17, 18, 21})):
+        for mode, losses in (("1d", {16, 17, 18, 19}), ("1d-b", {16, 17, 18, 19}),
+                             ("2d", {17, 18, 21}), ("2d-b", {17, 18, 21})):
             # Capture actual TSDuck output first and independently validate its complete wire data.
             # The external decoder receives unchanged parity from that capture, never a new oracle.
             records = fixture.capture(args.tsp, source, directory / "source.ts", mode, COLUMNS, ROWS, BURST)

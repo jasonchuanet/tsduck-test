@@ -63,7 +63,7 @@ def collect(process, sockets):
     return records
 
 
-def capture(tsp, source, path, mode, columns, rows, burst, rs204=False):
+def capture(tsp, source, path, mode, columns, rows, burst, rs204=False, equals=False, matrix_options=True):
     """Capture media and both standard FEC destinations from the real output plugin."""
     # Reserve an even media port and both parity ports atomically before child startup.
     # Failed neighboring binds are retried by the shared fixture utility.
@@ -91,12 +91,15 @@ def capture(tsp, source, path, mode, columns, rows, burst, rs204=False):
                    "--local-address", "127.0.0.1", "--local-port", str(source_port), "--ttl", "8", "--tos", "16"]
         # Fixed media identifiers make sequence wrapping observable without normalizing bytes.
         # The raw case verifies that FEC additions do not introduce encapsulation.
-        if mode != "raw":
+        if mode not in ("raw", "raw-none"):
             command += ["--rtp", "--start-sequence-number", "65520", "--ssrc-identifier", "270544960"]
-        if mode in ("1", "2", "default"):
-            # Bare --fec deliberately exercises the default two-stream mode.
-            command += ["--fec" if mode == "default" else f"--fec={mode}",
-                        "--fec-columns", str(columns), "--fec-rows", str(rows)]
+        if mode not in ("raw", "rtp"):
+            # Required values accept both spellings through the shared Args parser.
+            # Explicit none must preserve either raw UDP or RTP without producing parity.
+            value = "none" if mode == "raw-none" else mode
+            command += [f"--smpte-2022-fec={value}"] if equals else ["--smpte-2022-fec", value]
+            if mode != "raw-none" and mode != "none" and matrix_options:
+                command += ["--smpte-2022-l", str(columns), "--smpte-2022-d", str(rows)]
         # Input is TS188; existing output behavior appends the default all-FF RS trailer.
         # The parity layer must protect those transmitted bytes unchanged.
         if rs204:
@@ -156,6 +159,16 @@ def xor_group(group):
     return length, payload_type, timestamp, bytes(payload)
 
 
+def expected_columns(media_count, columns, rows, block_aligned):
+    """Count only complete equations with an actual subsequent emission interval."""
+    # Aligned columns are interleaved at c*D in the next block, as in Annex C.
+    # Staggered groups recur once per matrix, with the initial phase explicitly in SNBase.
+    phases = [col * rows if block_aligned else (col % rows) * columns + col for col in range(columns)]
+    # Neither arrangement may flush delayed parity by synthesizing extra media.
+    return sum(block * columns * rows + phase < media_count
+               for block in range(1, 1 + media_count // (columns * rows)) for phase in phases)
+
+
 def check_parity(records, media, mode, columns, rows):
     """Associate each captured equation with its media and check all protected bytes."""
     sequences = [struct.unpack_from("!H", packet, 2)[0] for packet in media]
@@ -181,6 +194,12 @@ def check_parity(records, media, mode, columns, rows):
             indices = [positions[(base + index * stride) % 65536] for index in range(count)]
         except KeyError as error:
             raise RuntimeError("Parity protects absent media") from error
+        # Dimensionality does not imply alignment: inspect actual protected membership.
+        # This prevents an aligned encoder from passing the staggered mode cases.
+        first = indices[0]
+        phase = first % columns if mode.endswith("-b") else (first % columns % rows) * columns + first % columns
+        if (row and first % columns != 0) or (not row and first % (columns * rows) != phase):
+            raise RuntimeError("Incorrect row membership or column alignment")
         length, payload_type, timestamp, payload = xor_group([media[index] for index in indices])
         if packet[14:17] != struct.pack("!HB", length, 0x80 | payload_type) or \
            packet[20:24] != struct.pack("!I", timestamp) or packet[28:] != payload:
@@ -191,15 +210,12 @@ def check_parity(records, media, mode, columns, rows):
         if struct.unpack_from("!H", packet, 2)[0] != counter % 65536:
             raise RuntimeError("Parity streams must have independent consecutive RTP sequences")
         counts[role - 1] += 1
-    # Annex C emits column c at c*D within the next matrix; final columns can remain pending.
-    # Count only columns whose scheduled emission has an actual later media packet.
-    # Shutdown must not synthesize media or send the remaining columns prematurely.
-    expected_columns = sum(block * columns * rows + col * rows < len(media)
-                           for block in range(1, 1 + len(media) // (columns * rows)) for col in range(columns))
-    expected_rows = len(media) // columns if mode in ("2", "default") else 0
-    expected_columns = expected_columns if mode in ("1", "2", "default") else 0
-    if counts != [expected_columns, expected_rows]:
-        raise RuntimeError(f"Unexpected parity counts {counts}, expected {[expected_columns, expected_rows]}")
+    # Count delayed equations independently of global arrival order across UDP sockets.
+    # Explicit none and omitted FEC must never generate either parity stream.
+    columns_count = expected_columns(len(media), columns, rows, mode.endswith("-b")) if mode.startswith(("1d", "2d")) else 0
+    rows_count = len(media) // columns if mode.startswith("2d") else 0
+    if counts != [columns_count, rows_count]:
+        raise RuntimeError(f"Unexpected parity counts {counts}, expected {[columns_count, rows_count]}")
     return counts
 
 
@@ -207,7 +223,7 @@ def verify(records, source, mode, columns, rows, rs204):
     """Check original media preservation before using it as the parity oracle."""
     media = [data for role, data, _ in records if role == 0]
     # Each stream is read in its own FIFO order, including sequence wrap.
-    if mode != "raw":
+    if mode not in ("raw", "raw-none"):
         for index, packet in enumerate(media):
             if len(packet) <= 12 or packet[:2] != b"\x80\x21" or \
                struct.unpack_from("!H", packet, 2)[0] != (65520 + index) % 65536 or \
@@ -215,7 +231,7 @@ def verify(records, source, mode, columns, rows, rs204):
                 raise RuntimeError("Incorrect or non-consecutive media RTP profile")
     # Exact bytes catch omitted, duplicated, reordered or corrupted packets, beyond counts alone.
     # Only after preservation succeeds may captured media serve as the parity oracle.
-    restored = b"".join(media_payload(packet if mode == "raw" else packet[12:], rs204) for packet in media)
+    restored = b"".join(media_payload(packet if mode in ("raw", "raw-none") else packet[12:], rs204) for packet in media)
     if restored != source:
         raise RuntimeError("IP output changed, omitted, duplicated or reordered original TS bytes")
     counts = check_parity(records, media, mode, columns, rows)
@@ -226,13 +242,19 @@ def invalid_options(tsp):
     """Fail before sending media for every incompatible option combination."""
     # Profile restrictions are checked by the output before its socket starts sending.
     # Match the relevant validation message rather than accepting any unrelated failure.
-    cases = [(["--fec"], "requires --rtp"),
-             (["--fec-rows", "4"], "require --fec"),
-             (["--fec-columns", "4"], "require --fec"),
-             (["--rtp", "--fec", "--payload-type", "34"], "payload type 33"),
-             (["--rtp", "--fec", "--packet-burst", "8"], "at most 7"),
-             (["--rtp", "--fec", "--fec-columns", "3"], "at least 4 columns"),
-             (["--rtp", "--fec", "--fec-columns", "20", "--fec-rows", "20"], "at most 100")]
+    cases = [(["--smpte-2022-fec"], "missing value"),
+             (["--smpte-2022-fec", "2d"], "requires --rtp"),
+             (["--smpte-2022-d", "4"], "require enabled"),
+             (["--smpte-2022-l", "4"], "require enabled"),
+             (["--smpte-2022-fec", "none", "--smpte-2022-l", "4"], "require enabled"),
+             (["--rtp", "--smpte-2022-fec", "2d", "--payload-type", "34"], "payload type 33"),
+             (["--rtp", "--smpte-2022-fec", "2d", "--packet-burst", "8"], "at most 7"),
+             (["--rtp", "--smpte-2022-fec", "2d", "--smpte-2022-l", "3"], "at least 4 columns"),
+             (["--rtp", "--smpte-2022-fec", "2d-b", "--smpte-2022-l", "20", "--smpte-2022-d", "20"], "at most 100"),
+             (["--fec=2"], "unknown option")]
+    # M1/M2 select vendor sub-packet timing, not additional standardized wire modes.
+    # Unsupported labels must be rejected instead of silently mapped to approximate behavior.
+    cases += [(["--rtp", "--smpte-2022-fec", mode], mode) for mode in ("2d-m1", "2d-m1-b", "2d-m2", "2d-m2-b")]
     for options, message in cases:
         # The validation target is always the IP output plugin, not the input syntax.
         # The positional null count keeps the source finite on every supported platform.
@@ -241,12 +263,12 @@ def invalid_options(tsp):
         # A timeout is an explicit failure instead of silently abandoning a child.
         result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5)
         if result.returncode == 0 or message not in result.stderr.decode(errors="replace"):
-            raise RuntimeError(f"Incorrect validation for FEC options: {options}")
+            raise RuntimeError(f"Incorrect validation for FEC options: {options}, exit={result.returncode}, stderr={result.stderr!r}")
     # Test both odd ports and the two upper even ports that cannot carry N+4.
     # No sockets are reserved for these cases because transmission must never begin.
     for port in (5001, 65532, 65534):
         # Odd media and overflowing two-stream destination ports must be rejected.
-        result = subprocess.run([tsp, "-I", "null", "1", "-O", "ip", f"127.0.0.1:{port}", "--rtp", "--fec"],
+        result = subprocess.run([tsp, "-I", "null", "1", "-O", "ip", f"127.0.0.1:{port}", "--rtp", "--smpte-2022-fec", "2d"],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5)
         if result.returncode == 0 or "even media destination port" not in result.stderr.decode(errors="replace"):
             raise RuntimeError("Invalid FEC destination accepted")
@@ -265,10 +287,15 @@ def main():
     original = b"".join(data[12:] for role, data in records if role == 0)
     # Reuse only the fixture's generated transport content, never its original parity.
     cases = [("raw", "raw", 4, 4, 7, False), ("rtp", "rtp", 4, 4, 7, False),
-             ("column-1x4", "1", 1, 4, 1, False), ("column-20x5", "1", 20, 5, 7, False),
-             ("column-5x20", "1", 5, 20, 4, False), ("default-4x4", "default", 4, 4, 7, False),
-             ("two-dimensional-10x10", "2", 10, 10, 4, False),
-             ("rs204-4x4", "2", 4, 4, 7, True), ("short-final-burst", "2", 4, 4, 7, False)]
+             ("none-raw", "raw-none", 4, 4, 7, False), ("none-rtp", "none", 4, 4, 7, False),
+             ("column-1x4", "1d-b", 1, 4, 1, False), ("column-20x5", "1d-b", 20, 5, 7, False),
+             ("column-5x20", "1d-b", 5, 20, 4, False), ("default-4x4", "2d-b", 4, 4, 7, False),
+             ("two-dimensional-10x10", "2d-b", 10, 10, 4, False),
+             ("rs204-4x4", "2d-b", 4, 4, 7, True), ("short-final-burst", "2d-b", 4, 4, 7, False),
+             ("staggered-annex-b", "1d", 4, 5, 7, False), ("staggered-common-factor", "1d", 4, 4, 7, False),
+             ("staggered-wide", "1d", 20, 5, 7, False), ("staggered-2d", "2d", 4, 4, 7, False),
+             ("staggered-large", "2d", 10, 10, 4, False), ("staggered-rs204", "2d", 4, 4, 7, True),
+             ("equal-sign-syntax", "2d-b", 4, 4, 7, False)]
     # Keep child inputs and output artifacts outside the test repository.
     # Normal runs neither regenerate the fixture nor alter reference files.
     with tempfile.TemporaryDirectory(prefix="tsduck-output-fec-") as name:
@@ -282,7 +309,8 @@ def main():
             # Repeat the generated TS when a large geometry needs more media than the fixture.
             # Repeated PCR values are handled by normal RTP output; parity still protects actual timestamps.
             source = (original * (1 + count * 188 // len(original)))[:count * 188]
-            capture_records = capture(args.tsp, source, directory / "source.ts", mode, columns, rows, burst, rs204)
+            capture_records = capture(args.tsp, source, directory / "source.ts", mode, columns, rows, burst, rs204,
+                                      equals=case == "equal-sign-syntax", matrix_options=case != "default-4x4")
             media, counts = verify(capture_records, source, mode, columns, rows, rs204)
             # References contain only deterministic summaries, never ports or RTP timestamps.
             # All recovered wire bytes were compared before this summary is emitted.
