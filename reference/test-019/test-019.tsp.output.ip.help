@@ -90,7 +90,8 @@ Options:
       FEC (2d). The suffix -b selects block alignment; otherwise columns are
       staggered. The default is none. FEC uses the media destination port +2
       and +4, with the same source port. Requires an even media port, payload
-      type 33 and at most seven TS packets per datagram.
+      type 33 and at most seven TS packets per datagram. Use --enforce-burst
+      for a constant media packet count.
       The 'mode' must be one of "1d", "1d-b", "2d", "2d-b", "none".
 
   --smpte-2022-l count

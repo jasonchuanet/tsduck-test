@@ -28,6 +28,9 @@ and burst/iterative reconstruction through the input decoder.
 At termination, partial groups and columns needing future media are discarded.
 The test expects no artificial media or prematurely emitted columns; final
 media can consequently lack column protection.
+The variable-length and short-final-burst cases exercise tolerant FEC compatibility.
+They do not assert the ST 2022-2 requirement for a constant TS packet count per session;
+strict constant-count transmission additionally needs enforced bursts and a whole-burst file length.
 
 An optional Unix interoperability check uses an independent GStreamer receiver:
 
