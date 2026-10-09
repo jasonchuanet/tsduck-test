@@ -31,6 +31,21 @@ Options:
       specified in option --packet-burst. By default, this is only a maximum
       value.
 
+  --fec[=1|2]
+      With --rtp, generate SMPTE ST 2022-1 column FEC (1) or column and row FEC
+      (2, the default). FEC uses the media destination port +2 and +4, with the
+      same source port. Requires an even media port, payload type 33 and at
+      most seven TS packets per datagram.
+
+  --fec-columns count
+      Number of FEC columns L, from 1 to 20 (at least 4 with 2D FEC). The
+      default is 4. Requires --fec. Columns times rows must not exceed 100.
+
+  --fec-rows count
+      Number of FEC rows D, from 4 to 20. The default is 4. Requires --fec.
+      Columns times rows must not exceed 100. Parity is interleaved with
+      subsequent media.
+
   -f
   --force-local-multicast-outgoing
       When the destination is a multicast address and --local-address is

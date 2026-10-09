@@ -1,0 +1,10 @@
+PASS raw: 50 media, 0 column, 0 row datagrams; exact media and parity
+PASS rtp: 50 media, 0 column, 0 row datagrams; exact media and parity
+PASS column-1x4: 14 media, 3 column, 0 row datagrams; exact media and parity
+PASS column-20x5: 302 media, 41 column, 0 row datagrams; exact media and parity
+PASS column-5x20: 302 media, 11 column, 0 row datagrams; exact media and parity
+PASS default-4x4: 50 media, 9 column, 12 row datagrams; exact media and parity
+PASS two-dimensional-10x10: 302 media, 21 column, 30 row datagrams; exact media and parity
+PASS rs204-4x4: 50 media, 9 column, 12 row datagrams; exact media and parity
+PASS short-final-burst: 51 media, 9 column, 12 row datagrams; exact media and parity
+PASS invalid-options: incompatible profile, geometry and ports rejected

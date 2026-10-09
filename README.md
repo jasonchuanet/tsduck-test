@@ -305,3 +305,4 @@ repository. But we now limit their size to 20 MB.
 | 208  | Non-regression on `ISDB_terrestrial_delivery_system_descriptor` (issue #1733)
 | 209  | Plugin `spliceinject`: event PTS close to wrap-down point (issue #1742)
 | 210  | SMPTE ST 2022-1 1D/2D FEC recovery in `ip` input (issue #189)
+| 211  | SMPTE ST 2022-1 FEC transmission in `ip` output, independent parity and source-port checks |
