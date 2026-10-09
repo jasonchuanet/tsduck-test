@@ -301,9 +301,10 @@ def check_output(returncode, path, expected, fec, recover, dropped, name, error)
     print(f"PASS {name}: {len(actual) // 188} TS packets, dropped {len(dropped)} RTP datagrams")
 
 
-
+# Allow host scheduling pauses without expiring intentionally recoverable losses.
+# Precise deadline behavior is checked separately with the decoder's simulated clock.
 def replay(tsp, records, media, base, name, fec, loss, recover, directory,
-           multicast=False, latency=200, buffer_size=4096, raw=False,
+           multicast=False, latency=1000, buffer_size=4096, raw=False,
            missing_parity=False, corrupt_parity=False, source_filter=False):
     """Drop selected media packets and compare the resulting TS byte for byte."""
     port, reservations = listeners()

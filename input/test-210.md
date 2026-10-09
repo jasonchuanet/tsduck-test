@@ -25,6 +25,9 @@ source filtering, multicast, receive timeout with idle parity sockets,
 and flag/dependent-option validation.
 Each output transport stream is compared byte for byte with the captured media
 payloads, excluding only the intentionally unrecoverable losses.
+Replay uses a one-second FEC latency to allow host scheduling pauses on CI
+runners. Deadline expiry is checked with a simulated clock in the decoder unit
+tests, independently of operating-system scheduling.
 
 The companion decoder tests in TSDuck cover all mandatory ST 2022-2 matrix
 sizes, staggered columns, parity before media, duplicate and reordered media,
