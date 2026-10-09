@@ -1,0 +1,2 @@
+PASS startup-errors: 175 asynchronous diagnostics and exit codes verified
+PASS custom-options: sections --version remains available
