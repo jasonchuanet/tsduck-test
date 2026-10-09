@@ -84,3 +84,10 @@ and repeats every `L*D` media. This agrees with the Annex B 4x5 example
 L/D with a common factor and L greater than D. It bounds startup to one
 matrix; each complete column is sent L intervals after its last member.
 Incomplete startup columns and delayed termination columns are discarded.
+
+Parser-level rejection messages are checked by the matching
+`RTPFECOptionsTest` TSUnit suite with a synchronous report buffer. The CLI
+regression requires exit status 1 for these cases, and still checks the text
+of FEC-specific validation after parsing. This keeps FEC coverage independent
+of TSP's inherited asynchronous diagnostic loss on parser-driven process exit.
+The separate plugin-startup regression tests that logger lifecycle directly.

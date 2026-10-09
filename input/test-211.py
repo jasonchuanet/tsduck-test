@@ -242,7 +242,7 @@ def invalid_options(tsp):
     """Fail before sending media for every incompatible option combination."""
     # Profile restrictions are checked by the output before its socket starts sending.
     # Match the relevant validation message rather than accepting any unrelated failure.
-    cases = [(["--smpte-2022-fec"], "missing value"),
+    cases = [(["--smpte-2022-fec"], None),
              (["--smpte-2022-fec", "2d"], "requires --rtp"),
              (["--smpte-2022-d", "4"], "require enabled"),
              (["--smpte-2022-l", "4"], "require enabled"),
@@ -251,10 +251,10 @@ def invalid_options(tsp):
              (["--rtp", "--smpte-2022-fec", "2d", "--packet-burst", "8"], "at most 7"),
              (["--rtp", "--smpte-2022-fec", "2d", "--smpte-2022-l", "3"], "at least 4 columns"),
              (["--rtp", "--smpte-2022-fec", "2d-b", "--smpte-2022-l", "20", "--smpte-2022-d", "20"], "at most 100"),
-             (["--fec=2"], "unknown option")]
+             (["--fec=2"], None)]
     # M1/M2 select vendor sub-packet timing, not additional standardized wire modes.
     # Unsupported labels must be rejected instead of silently mapped to approximate behavior.
-    cases += [(["--rtp", "--smpte-2022-fec", mode], mode) for mode in ("2d-m1", "2d-m1-b", "2d-m2", "2d-m2-b")]
+    cases += [(["--rtp", "--smpte-2022-fec", mode], None) for mode in ("2d-m1", "2d-m1-b", "2d-m2", "2d-m2-b")]
     for options, message in cases:
         # The validation target is always the IP output plugin, not the input syntax.
         # The positional null count keeps the source finite on every supported platform.
@@ -262,7 +262,10 @@ def invalid_options(tsp):
         # Finite null input bounds an accidentally accepted configuration as well.
         # A timeout is an explicit failure instead of silently abandoning a child.
         result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5)
-        if result.returncode == 0 or message not in result.stderr.decode(errors="replace"):
+        # RTPFECOptionsTest captures every parser diagnostic synchronously.
+        # CLI exit status remains mandatory; loadArgs validation messages are
+        # also required here, since they occur after successful parsing.
+        if result.returncode != 1 or (message is not None and message not in result.stderr.decode(errors="replace")):
             raise RuntimeError(f"Incorrect validation for FEC options: {options}, exit={result.returncode}, stderr={result.stderr!r}")
     # Test both odd ports and the two upper even ports that cannot carry N+4.
     # No sockets are reserved for these cases because transmission must never begin.
@@ -270,7 +273,7 @@ def invalid_options(tsp):
         # Odd media and overflowing two-stream destination ports must be rejected.
         result = subprocess.run([tsp, "-I", "null", "1", "-O", "ip", f"127.0.0.1:{port}", "--rtp", "--smpte-2022-fec", "2d"],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5)
-        if result.returncode == 0 or "even media destination port" not in result.stderr.decode(errors="replace"):
+        if result.returncode != 1 or "even media destination port" not in result.stderr.decode(errors="replace"):
             raise RuntimeError("Invalid FEC destination accepted")
     print("PASS invalid-options: incompatible profile, geometry and ports rejected")
 

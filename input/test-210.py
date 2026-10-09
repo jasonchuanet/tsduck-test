@@ -390,16 +390,19 @@ def input_options(tsp):
     """Verify the dektec-compatible receive flag and its dependent controls."""
     # Input needs no requested dimension: every equation already describes its members.
     # An output-style value must fail during parsing instead of becoming a port parameter.
-    cases = [(["--smpte-2022-fec=2d"], "no value allowed"),
+    cases = [(["--smpte-2022-fec=2d"], None),
              (["--smpte-2022-fec-latency", "1000"], "require --smpte-2022-fec"),
              (["--smpte-2022-fec-buffer-size", "4096"], "require --smpte-2022-fec"),
-             (["--fec=2"], "unknown option")]
+             (["--fec=2"], None)]
     for options, message in cases:
         # Bound an accidentally accepted configuration with media inactivity timeout.
         # Matching the validation message excludes unrelated socket or timeout failures.
         result = subprocess.run([tsp, "-I", "ip", "5000", "--receive-timeout", "100", *options, "-O", "drop"],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5)
-        if result.returncode == 0 or message not in result.stderr.decode(errors="replace"):
+        # Parser diagnostics are checked directly in RTPFECOptionsTest, using
+        # a report buffer before any process exit. The CLI still must reject
+        # these arguments; FEC-specific loadArgs errors also require their text.
+        if result.returncode != 1 or (message is not None and message not in result.stderr.decode(errors="replace")):
             raise RuntimeError(f"Incorrect input FEC option validation: {options}")
     # The normal recovery cases separately prove the flag works for both wire dimensions.
     print("PASS input-options: receive flag and dependent controls validated")

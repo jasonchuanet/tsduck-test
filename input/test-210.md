@@ -61,3 +61,10 @@ Protocol references:
 - [SMPTE ST 2022-2:2007](https://pub.smpte.org/pub/st2022-2/st2022-2-2007.pdf):
   MPEG-TS RTP profile and required matrix sizes.
 - [TSDuck issue #189](https://github.com/tsduck/tsduck/issues/189).
+
+Parser-level rejection messages are checked by the matching
+`RTPFECOptionsTest` TSUnit suite with a synchronous report buffer. The CLI
+regression requires exit status 1 for these cases, and still checks the text
+of FEC-specific validation after parsing. This keeps FEC coverage independent
+of TSP's inherited asynchronous diagnostic loss on parser-driven process exit.
+The separate plugin-startup regression tests that logger lifecycle directly.
