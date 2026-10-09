@@ -16,6 +16,7 @@ def reject(tool, options, message):
     """Require both the failure status and its queued diagnostic on every run."""
     # Do not enable synchronous logging, sleep, or retry a lost diagnostic.
     # The ordinary process shutdown must drain its report before returning.
+    # Preserve original bytes in failure reports, including empty stderr.
     result = subprocess.run([tool, *options], stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, timeout=5)
     # A finite source also bounds any configuration accidentally accepted.
