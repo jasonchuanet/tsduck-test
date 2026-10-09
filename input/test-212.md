@@ -16,6 +16,8 @@ The corresponding TSUnit regressions verify `TSProcessor::start()` failure and
 successful reuse after each plugin role fails, plus preservation of definitions
 and values for all four reused predefined names across error-policy changes.
 They also verify that changing the actual predefined-option flags still removes
-the built-in options.
+the built-in options. Invalid arguments for all three roles and a missing plugin
+must also fail when a caller suppresses error diagnostics. The report remains
+empty, records failure, and permits reuse after the failed initialization.
 
 The Python and shell harnesses are original BSD-2-Clause code.
